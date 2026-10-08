@@ -201,6 +201,9 @@ async function executeInitGenerator(dependency: string, workspacePath: string) {
   let selectedFlags;
   if (opts.length) {
     selectedFlags = await selectFlags(initGenerator.name, opts);
+    if (!selectedFlags) {
+      return;
+    }
   }
   const command = `nx g ${initGeneratorName} ${
     selectedFlags?.join(' ') ?? ''

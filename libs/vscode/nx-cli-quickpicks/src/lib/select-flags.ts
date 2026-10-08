@@ -1,5 +1,5 @@
 import { Option } from '@nx-console/shared-schema';
-import { QuickPickItem, window } from 'vscode';
+import { env, QuickPickItem, window } from 'vscode';
 
 class CliTaskFlagQuickPickItem implements QuickPickItem {
   constructor(
@@ -14,6 +14,16 @@ class CliTaskFlagQuickPickItem implements QuickPickItem {
 class ExecuteCommandQuickPickItem implements QuickPickItem {
   type = 'execute';
   picked = true;
+  alwaysShow = true;
+
+  constructor(
+    readonly label: string,
+    readonly description?: string,
+  ) {}
+}
+
+class CopyCommandQuickPickItem implements QuickPickItem {
+  type = 'copy';
   alwaysShow = true;
 
   constructor(
@@ -50,10 +60,18 @@ export async function selectFlags(
     flagArray.push(customOptions);
   }
 
+  const currentCommand = `nx ${command} ${flagArray.join(' ')}`.trim();
+
   const selection = await promptForFlagToSet(
-    `nx ${command} ${flagArray.join(' ')}`,
+    currentCommand,
     options.filter((option) => !userSetFlags[option.name]),
   );
+
+  if (selection.copy) {
+    await env.clipboard.writeText(currentCommand);
+    window.showInformationMessage(`Copied "${currentCommand}" to clipboard`);
+    return undefined;
+  }
 
   if (selection.execute !== undefined) {
     return selection.execute ? flagArray : undefined;
@@ -82,15 +100,18 @@ async function promptForFlagToSet(
   options: Option[],
 ): Promise<{
   execute?: boolean;
+  copy?: boolean;
   flag?: CliTaskFlagQuickPickItem;
   customOptions?: boolean;
 }> {
   const flagItems: Array<
     | CliTaskFlagQuickPickItem
     | ExecuteCommandQuickPickItem
+    | CopyCommandQuickPickItem
     | CustomOptionsQuickPickItem
   > = [
     new ExecuteCommandQuickPickItem(`Execute: ${currentCommand}`),
+    new CopyCommandQuickPickItem(`Copy: ${currentCommand}`),
     ...options.map((option) => {
       const detail =
         option.description ??
@@ -110,7 +131,7 @@ async function promptForFlagToSet(
   ];
 
   const selection = await window.showQuickPick(flagItems, {
-    placeHolder: 'Execute command or set flags',
+    placeHolder: 'Execute command, copy it, or set flags',
   });
 
   if (!selection) {
@@ -121,6 +142,8 @@ async function promptForFlagToSet(
   if (!flagSelected) {
     if ((selection as CustomOptionsQuickPickItem).type === 'custom') {
       return { customOptions: true };
+    } else if ((selection as CopyCommandQuickPickItem).type === 'copy') {
+      return { copy: true };
     } else {
       return { execute: true };
     }
